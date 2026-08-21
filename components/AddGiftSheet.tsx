@@ -12,6 +12,7 @@ import {
 
 import { Button, Field, Muted } from '@/components/ui';
 import { theme } from '@/constants/Colors';
+import { retailerLabel, urlNeedsBrowser } from '@/lib/retailers';
 import { supabase } from '@/lib/supabase';
 
 export type DraftGift = {
@@ -52,6 +53,7 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadingHint, setLoadingHint] = useState('Fetching details from the link');
 
   useEffect(() => {
     if (!visible) {
@@ -63,6 +65,7 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
       setImageUrl(null);
       setError(null);
       setSaving(false);
+      setLoadingHint('Fetching details from the link');
     }
   }, [visible]);
 
@@ -80,6 +83,13 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
     let normalized = trimmed;
     if (!/^https?:\/\//i.test(normalized)) normalized = `https://${normalized}`;
 
+    const retailer = retailerLabel(normalized);
+    const slowPath = urlNeedsBrowser(normalized);
+    setLoadingHint(
+      slowPath
+        ? `Fetching from ${retailer ?? 'store'}… this can take a few seconds`
+        : 'Fetching details from the link',
+    );
     setPhase('loading');
     setError(null);
     try {
@@ -88,6 +98,8 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
         imageUrl: string | null;
         description: string | null;
         price: number | null;
+        mode?: 'fast' | 'browser';
+        usedBrowser?: boolean;
         error?: string;
       }>('unfurl', { body: { url: normalized } });
 
@@ -99,7 +111,9 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
       setPriceText(formatPriceInput(data?.price ?? null));
       if (data?.description && !notes.trim()) setNotes(data.description.slice(0, 280));
       if (data?.error && !data.title && !data.imageUrl) {
-        setError('Could not read that page — fill in the details below.');
+        setError(data.error);
+      } else if (data?.error) {
+        setError(data.error);
       }
       setPhase('edit');
     } catch {
@@ -162,9 +176,9 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
               <View style={styles.loadingHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.heading}>Adding gift…</Text>
-                  <Muted>Fetching details from the link</Muted>
+                  <Muted>{loadingHint}</Muted>
                 </View>
-                <ActivityIndicator color={theme.colors.pink} />
+                <ActivityIndicator color={theme.colors.pink} size="large" />
               </View>
               <View style={styles.skeletonCard}>
                 <View style={styles.skeletonThumb} />

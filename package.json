@@ -34,6 +34,7 @@
     "@testing-library/react-native": "^14.0.1",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
+    "playwright": "^1.62.1",
     "supabase": "^2.115.0",
     "typescript": "~6.0.3",
     "vitest": "^4.1.11"
@@ -52,6 +53,7 @@
     "db:start": "supabase start",
     "db:status": "supabase status",
     "db:reset": "supabase db reset",
+    "unfurl:browser": "node scripts/unfurl-browser.mjs",
     "devices": "expo start"
   },
   "private": true
