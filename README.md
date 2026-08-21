@@ -53,6 +53,13 @@ npm run test:e2e            # Playwright UI flows against Expo web
 
 UI e2e covers: sign up, create wishlist, add gifts, URL image preview (unfurl), remove gift, friend request, create group, add/remove group members.
 
+**Product link scraping:** fast OG/JSON-LD first; Amazon / Walmart / Target escalate to a local Playwright helper:
+
+```bash
+npx supabase functions serve   # edge unfurl
+npm run unfurl:browser         # Playwright sidecar on :8787
+```
+
 **Android emulator storage:** if Expo Go install fails with `INSTALL_FAILED_INSUFFICIENT_STORAGE`, wipe the AVD once:
 
 ```bash

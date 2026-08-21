@@ -3,6 +3,25 @@ const cors = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const BROWSER_HOST_PATTERNS = [
+  /(^|\.)amazon\./i,
+  /(^|\.)amzn\./i,
+  /(^|\.)walmart\./i,
+  /(^|\.)target\./i,
+];
+
+function hostnameNeedsBrowser(hostname: string): boolean {
+  return BROWSER_HOST_PATTERNS.some((re) => re.test(hostname));
+}
+
+function looksIncomplete(meta: {
+  title: string | null;
+  imageUrl: string | null;
+  price: number | null;
+}): boolean {
+  return !meta.title || (!meta.imageUrl && meta.price == null);
+}
+
 function metaContent(html: string, keys: string[]): string | null {
   for (const key of keys) {
     const patterns = [
@@ -88,6 +107,62 @@ function parseUnfurlHtml(html: string, pageUrl: string) {
   return { title, imageUrl, description, price };
 }
 
+async function fastFetch(url: string) {
+  const upstream = await fetch(url, {
+    headers: {
+      'User-Agent': 'GiftlistUnfurl/1.0',
+      Accept: 'text/html,application/xhtml+xml',
+    },
+    redirect: 'follow',
+  });
+  if (!upstream.ok) {
+    return {
+      title: null as string | null,
+      imageUrl: null as string | null,
+      description: null as string | null,
+      price: null as number | null,
+      error: `fetch failed (${upstream.status})`,
+    };
+  }
+  const html = (await upstream.text()).slice(0, 250_000);
+  return { ...parseUnfurlHtml(html, url), error: undefined as string | undefined };
+}
+
+function browserSidecarUrls(): string[] {
+  const configured = Deno.env.get('PLAYWRIGHT_UNFURL_URL');
+  const urls = [
+    configured,
+    'http://127.0.0.1:8787',
+    'http://host.docker.internal:8787',
+  ].filter(Boolean) as string[];
+  return [...new Set(urls)];
+}
+
+async function browserFetch(url: string) {
+  for (const base of browserSidecarUrls()) {
+    try {
+      const res = await fetch(`${base.replace(/\/$/, '')}/unfurl`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      return {
+        title: data.title ?? null,
+        imageUrl: data.imageUrl ?? null,
+        description: data.description ?? null,
+        price: typeof data.price === 'number' ? data.price : null,
+        mode: 'browser' as const,
+        error: data.error,
+      };
+    } catch {
+      // try next host
+    }
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: cors });
@@ -119,33 +194,38 @@ Deno.serve(async (req) => {
       });
     }
 
-    const upstream = await fetch(parsed.toString(), {
-      headers: {
-        'User-Agent': 'GiftlistUnfurl/1.0',
-        Accept: 'text/html,application/xhtml+xml',
-      },
-      redirect: 'follow',
-    });
+    const wantsBrowser = hostnameNeedsBrowser(parsed.hostname);
+    let meta = await fastFetch(parsed.toString());
+    let mode: 'fast' | 'browser' = 'fast';
 
-    if (!upstream.ok) {
-      return new Response(
-        JSON.stringify({
-          error: `fetch failed (${upstream.status})`,
-          title: null,
-          imageUrl: null,
-          description: null,
-          price: null,
-        }),
-        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } },
-      );
+    const shouldEscalate = wantsBrowser || looksIncomplete(meta) || Boolean(meta.error);
+    if (shouldEscalate) {
+      const browserMeta = await browserFetch(parsed.toString());
+      if (browserMeta && (browserMeta.title || browserMeta.imageUrl || browserMeta.price != null)) {
+        meta = browserMeta;
+        mode = 'browser';
+      } else if (wantsBrowser && !browserMeta) {
+        meta = {
+          ...meta,
+          error:
+            meta.error ??
+            'Retailer page needs the Playwright helper (npm run unfurl:browser). You can enter details manually.',
+        };
+      }
     }
 
-    const html = (await upstream.text()).slice(0, 250_000);
-    const meta = parseUnfurlHtml(html, parsed.toString());
-
-    return new Response(JSON.stringify(meta), {
-      headers: { ...cors, 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({
+        title: meta.title,
+        imageUrl: meta.imageUrl,
+        description: meta.description,
+        price: meta.price,
+        mode,
+        usedBrowser: mode === 'browser',
+        error: meta.error,
+      }),
+      { headers: { ...cors, 'Content-Type': 'application/json' } },
+    );
   } catch (e) {
     return new Response(
       JSON.stringify({
@@ -154,6 +234,8 @@ Deno.serve(async (req) => {
         imageUrl: null,
         description: null,
         price: null,
+        mode: 'fast',
+        usedBrowser: false,
       }),
       { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } },
     );
