@@ -81,6 +81,10 @@ export default function RootLayout() {
                 name="wishlist/[id]"
                 options={{ headerShown: true, title: 'Giftlist', headerBackTitle: 'Back' }}
               />
+              <Stack.Screen
+                name="friend/[id]"
+                options={{ headerShown: true, title: 'Wishlists', headerBackTitle: 'Back' }}
+              />
               <Stack.Screen name="wishlist/create" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="invite/[token]" options={{ headerShown: false }} />
             </Stack>

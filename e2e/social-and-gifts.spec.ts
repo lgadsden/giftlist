@@ -134,14 +134,18 @@ test.describe('Social, edit gift, claim', () => {
     await expect(ownerPage.getByTestId('gift-title-Cozy Wool Socks')).toBeVisible();
     await expect(ownerPage.getByTestId('gift-price-Cozy Wool Socks')).toHaveText('$22.50');
 
-    // Friend claims gift and marks purchased
-    await goTab(friendPage, 'Lists');
+    // Friend opens owner's wishlist via Friends → View Wishlist
+    await goTab(friendPage, 'Friends');
     await friendPage.reload();
-    await goTab(friendPage, 'Lists');
-    await expect(friendPage.getByTestId('wishlist-row-Shared Birthday')).toBeVisible({
+    await goTab(friendPage, 'Friends');
+    await expect(friendPage.getByTestId(`view-wishlist-${ownerUser.username}`)).toBeVisible({
       timeout: 20_000,
     });
-    await friendPage.getByTestId('wishlist-row-Shared Birthday').click();
+    await friendPage.getByTestId(`view-wishlist-${ownerUser.username}`).click();
+    await expect(friendPage.getByTestId('friend-wishlist-row-Shared Birthday')).toBeVisible({
+      timeout: 20_000,
+    });
+    await friendPage.getByTestId('friend-wishlist-row-Shared Birthday').click();
     await expect(friendPage.getByTestId('gift-title-Cozy Wool Socks')).toBeVisible({
       timeout: 15_000,
     });

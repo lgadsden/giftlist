@@ -21,6 +21,10 @@ type WishlistRow = {
   itemCount: number;
 };
 
+type FriendListRow = WishlistRow & {
+  ownerName: string;
+};
+
 type ActivityRow = {
   id: string;
   title: string;
@@ -50,9 +54,10 @@ function initials(text: string): string {
 }
 
 export default function HomeScreen() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const router = useRouter();
   const [lists, setLists] = useState<WishlistRow[]>([]);
+  const [friendLists, setFriendLists] = useState<FriendListRow[]>([]);
   const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -60,9 +65,9 @@ export default function HomeScreen() {
     const [listsRes, notifRes] = await Promise.all([
       supabase
         .from('wishlists')
-        .select('id, title, event_type, event_date, gifts(image_url)')
+        .select('id, title, event_type, event_date, owner_id, gifts(image_url)')
         .order('updated_at', { ascending: false })
-        .limit(8),
+        .limit(24),
       supabase
         .from('notifications')
         .select('id, title, body, created_at')
@@ -70,14 +75,20 @@ export default function HomeScreen() {
         .limit(10),
     ]);
 
-    const mapped =
+    const rows =
       ((listsRes.data as {
         id: string;
         title: string;
         event_type: EventType;
         event_date: string | null;
+        owner_id: string;
         gifts: { image_url: string | null }[] | null;
-      }[]) ?? []).map((row) => ({
+      }[]) ?? []);
+
+    const mine = rows
+      .filter((row) => row.owner_id === user?.id)
+      .slice(0, 8)
+      .map((row) => ({
         id: row.id,
         title: row.title,
         event_type: row.event_type,
@@ -86,9 +97,37 @@ export default function HomeScreen() {
         itemCount: row.gifts?.length ?? 0,
       }));
 
-    setLists(mapped);
+    const others = rows.filter((row) => row.owner_id !== user?.id).slice(0, 8);
+    let friendMapped: FriendListRow[] = [];
+    if (others.length) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, display_name')
+        .in(
+          'id',
+          [...new Set(others.map((r) => r.owner_id))],
+        );
+      const byId = Object.fromEntries(
+        ((profiles as { id: string; display_name: string }[]) ?? []).map((p) => [
+          p.id,
+          p.display_name,
+        ]),
+      );
+      friendMapped = others.map((row) => ({
+        id: row.id,
+        title: row.title,
+        event_type: row.event_type,
+        event_date: row.event_date,
+        coverImageUrl: firstGiftImage(row.gifts),
+        itemCount: row.gifts?.length ?? 0,
+        ownerName: byId[row.owner_id] ?? 'Friend',
+      }));
+    }
+
+    setLists(mine);
+    setFriendLists(friendMapped);
     setActivity((notifRes.data as ActivityRow[]) ?? []);
-  }, []);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -174,6 +213,50 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
         )}
+
+        {friendLists.length > 0 ? (
+          <>
+            <View style={styles.sectionRow}>
+              <Text style={styles.section}>Friends’ lists</Text>
+              <Pressable onPress={() => router.push('/(tabs)/lists')} hitSlop={8}>
+                <Text style={styles.link}>See All ›</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.listRail}
+              decelerationRate="fast"
+              snapToInterval={292}
+              snapToAlignment="start">
+              {friendLists.map((list) => (
+                <Pressable
+                  key={list.id}
+                  onPress={() => router.push(`/wishlist/${list.id}`)}
+                  style={({ pressed }) => [
+                    pressed && { opacity: 0.94, transform: [{ translateY: -1 }] },
+                  ]}>
+                  <Card style={styles.listCard}>
+                    <WishlistCover
+                      eventType={list.event_type}
+                      coverImageUrl={list.coverImageUrl}
+                      badge={coverDateBadge(list.event_date)}
+                    />
+                    <View style={styles.listBody}>
+                      <Text style={styles.cardTitle} numberOfLines={1}>
+                        {list.title}
+                      </Text>
+                      <Text style={styles.cardMeta} numberOfLines={1}>
+                        {list.ownerName} · {list.itemCount} item
+                        {list.itemCount === 1 ? '' : 's'}
+                      </Text>
+                    </View>
+                  </Card>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </>
+        ) : null}
 
         <Text style={[styles.section, styles.sectionPad]}>Friend Activity</Text>
         <View style={styles.activityWrap}>

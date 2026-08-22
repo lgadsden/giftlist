@@ -1,4 +1,5 @@
 import * as Linking from 'expo-linking';
+import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   Alert,
@@ -41,6 +42,7 @@ type GroupMember = ProfileHit & { role: string };
 
 export default function FriendsScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<ProfileHit[]>([]);
   const [requests, setRequests] = useState<(FriendshipRow & { other?: ProfileHit })[]>([]);
@@ -398,8 +400,21 @@ export default function FriendsScreen() {
         }
         renderItem={({ item }) => (
           <Card style={{ marginBottom: 8 }} testID={`friend-row-${item.username}`}>
-            <Text style={styles.name}>{item.display_name}</Text>
-            <Muted>@{item.username}</Muted>
+            <View style={styles.row}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {item.display_name}
+                </Text>
+                <Muted>@{item.username}</Muted>
+              </View>
+              <Pressable
+                style={styles.viewList}
+                onPress={() => router.push(`/friend/${item.id}`)}
+                testID={`view-wishlist-${item.username}`}
+                accessibilityLabel={`View ${item.display_name}'s wishlist`}>
+                <Text style={styles.viewListText}>View Wishlist</Text>
+              </Pressable>
+            </View>
           </Card>
         )}
       />
@@ -470,4 +485,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.white,
   },
   declineText: { color: theme.colors.muted, fontWeight: '700' },
+  viewList: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: theme.colors.pinkSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 27, 96, 0.2)',
+  },
+  viewListText: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 13,
+    color: theme.colors.pink,
+  },
 });

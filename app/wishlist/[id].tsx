@@ -120,6 +120,7 @@ export default function WishlistDetailScreen() {
   const [menuGift, setMenuGift] = useState<Gift | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<GiftFilter>('all');
+  const [ownerName, setOwnerName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -128,7 +129,19 @@ export default function WishlistDetailScreen() {
       .select('id, title, event_type, event_date, owner_id')
       .eq('id', id)
       .maybeSingle();
-    setWishlist((list as Wishlist | null) ?? null);
+    const nextList = (list as Wishlist | null) ?? null;
+    setWishlist(nextList);
+
+    if (nextList && nextList.owner_id !== user?.id) {
+      const { data: owner } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', nextList.owner_id)
+        .maybeSingle();
+      setOwnerName((owner as { display_name?: string } | null)?.display_name ?? null);
+    } else {
+      setOwnerName(null);
+    }
 
     const { data: giftRows } = await supabase
       .from('gifts')
@@ -154,7 +167,7 @@ export default function WishlistDetailScreen() {
     } else {
       setReservations({});
     }
-  }, [id]);
+  }, [id, user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -514,6 +527,9 @@ export default function WishlistDetailScreen() {
           />
         }>
         <Text style={styles.listHeading}>{wishlist?.title ?? 'Wishlist'}</Text>
+        {!isOwner && ownerName ? (
+          <Text style={styles.ownerLine}>{ownerName}&apos;s wishlist</Text>
+        ) : null}
         <Text style={styles.listSummary}>
           {wishlist
             ? `${gifts.length} item${gifts.length === 1 ? '' : 's'}${
@@ -638,6 +654,12 @@ const styles = StyleSheet.create({
     fontSize: 30,
     color: theme.colors.ink,
     letterSpacing: -0.5,
+  },
+  ownerLine: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 15,
+    color: theme.colors.muted,
+    marginTop: 2,
   },
   listSummary: {
     fontFamily: 'DMSans_700Bold',
