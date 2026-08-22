@@ -17,6 +17,7 @@ describe('retailers', () => {
 
   it('detects incomplete metadata', () => {
     expect(unfurlLooksIncomplete({ title: null, imageUrl: null, price: null })).toBe(true);
+    expect(unfurlLooksIncomplete({ title: 'Mug', imageUrl: 'https://x', price: null })).toBe(true);
     expect(unfurlLooksIncomplete({ title: 'Mug', imageUrl: null, price: 10 })).toBe(false);
   });
 });

@@ -10,10 +10,10 @@ import { Redirect, Stack, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { theme } from '@/constants/Colors';
 import { AuthProvider, useAuth } from '@/lib/auth';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -35,18 +35,18 @@ const navTheme = {
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
   const segments = useSegments();
-  const inAuth = segments[0] === '(auth)';
+  const top = String(segments[0] ?? '');
+  const inAuth = top === '(auth)';
+  const inInvite = top === 'invite';
 
   if (loading) return null;
 
-  if (!session && !inAuth) {
+  // Invite links are public entry points; the screen itself sends guests to auth.
+  if (!session && !inAuth && !inInvite) {
     return <Redirect href="/(auth)" />;
   }
 
-  if (session && inAuth) {
-    return <Redirect href="/(tabs)" />;
-  }
-
+  // Logged-in users on (auth) are redirected by the auth screen (honors ?next=).
   return <>{children}</>;
 }
 
@@ -82,6 +82,7 @@ export default function RootLayout() {
                 options={{ headerShown: true, title: 'Giftlist', headerBackTitle: 'Back' }}
               />
               <Stack.Screen name="wishlist/create" options={{ presentation: 'modal', headerShown: false }} />
+              <Stack.Screen name="invite/[token]" options={{ headerShown: false }} />
             </Stack>
           </AuthGate>
         </ThemeProvider>

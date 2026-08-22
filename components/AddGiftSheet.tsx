@@ -12,7 +12,15 @@ import {
 
 import { Button, Field, Muted } from '@/components/ui';
 import { theme } from '@/constants/Colors';
+import {
+  formatPriceInput,
+  GIFT_PRIORITIES,
+  normalizeGiftPriority,
+  parsePriceInput,
+  type GiftPriority,
+} from '@/lib/gifts';
 import { retailerLabel, urlNeedsBrowser } from '@/lib/retailers';
+import { cleanScrapedTitle, shortProductTitle } from '@/lib/productTitle';
 import { supabase } from '@/lib/supabase';
 
 export type DraftGift = {
@@ -21,7 +29,10 @@ export type DraftGift = {
   imageUrl: string | null;
   price: number | null;
   notes: string;
+  priority: GiftPriority;
 };
+
+export type EditableGift = DraftGift & { id: string };
 
 type Phase = 'url' | 'loading' | 'edit';
 
@@ -30,30 +41,23 @@ type Props = {
   listTitle: string;
   onClose: () => void;
   onSave: (draft: DraftGift) => Promise<void>;
+  /** When set, opens directly in edit mode for an existing gift. */
+  initialGift?: EditableGift | null;
 };
 
-function formatPriceInput(price: number | null): string {
-  if (price == null) return '';
-  return String(price);
-}
-
-function parsePriceInput(raw: string): number | null {
-  const cleaned = raw.replace(/[^0-9.]/g, '');
-  if (!cleaned) return null;
-  const n = Number.parseFloat(cleaned);
-  return Number.isFinite(n) && n >= 0 ? n : null;
-}
-
-export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
-  const [phase, setPhase] = useState<Phase>('url');
+export function AddGiftSheet({ visible, listTitle, onClose, onSave, initialGift }: Props) {
+  const editing = Boolean(initialGift);
+  const [phase, setPhase] = useState<Phase>(editing ? 'edit' : 'url');
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [priceText, setPriceText] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [priority, setPriority] = useState<GiftPriority>(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingHint, setLoadingHint] = useState('Fetching details from the link');
+  const [photoOpen, setPhotoOpen] = useState(false);
 
   useEffect(() => {
     if (!visible) {
@@ -63,11 +67,24 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
       setNotes('');
       setPriceText('');
       setImageUrl(null);
+      setPriority(0);
       setError(null);
       setSaving(false);
       setLoadingHint('Fetching details from the link');
+      setPhotoOpen(false);
+      return;
     }
-  }, [visible]);
+    if (initialGift) {
+      setPhase('edit');
+      setUrl(initialGift.url ?? '');
+      setTitle(initialGift.title);
+      setNotes(initialGift.notes ?? '');
+      setPriceText(formatPriceInput(initialGift.price));
+      setImageUrl(initialGift.imageUrl);
+      setPriority(normalizeGiftPriority(initialGift.priority));
+      setError(null);
+    }
+  }, [visible, initialGift]);
 
   const goManual = () => {
     setPhase('edit');
@@ -106,7 +123,7 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
       if (fnError) throw fnError;
 
       setUrl(normalized);
-      setTitle(data?.title?.trim() || '');
+      setTitle(cleanScrapedTitle(data?.title) || '');
       setImageUrl(data?.imageUrl ?? null);
       setPriceText(formatPriceInput(data?.price ?? null));
       if (data?.description && !notes.trim()) setNotes(data.description.slice(0, 280));
@@ -136,6 +153,7 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
         imageUrl,
         price: parsePriceInput(priceText),
         notes: notes.trim(),
+        priority,
       });
       onClose();
     } catch (e) {
@@ -149,7 +167,7 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <Pressable style={styles.dismiss} onPress={onClose} accessibilityLabel="Close" />
-        <View style={styles.sheet} testID="add-gift-sheet">
+        <View style={styles.sheet} testID={editing ? 'edit-gift-sheet' : 'add-gift-sheet'}>
           <View style={styles.handle} />
 
           {phase === 'url' ? (
@@ -196,22 +214,31 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
           {phase === 'edit' ? (
             <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
               <View style={styles.editHeader}>
-                <Text style={styles.heading}>Add gift</Text>
+                <Text style={styles.heading}>{editing ? 'Edit gift' : 'Add gift'}</Text>
                 <Pressable onPress={onClose} hitSlop={12}>
                   <Text style={styles.close}>✕</Text>
                 </Pressable>
               </View>
 
               {imageUrl ? (
-                <Image
-                  source={{ uri: imageUrl }}
-                  style={styles.hero}
-                  accessibilityLabel="Gift preview image"
-                  testID="gift-preview-image"
-                />
+                <Pressable
+                  onPress={() => setPhotoOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="View larger photo"
+                  testID="gift-preview-thumb"
+                  style={styles.thumbRow}>
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={styles.thumb}
+                    resizeMode="contain"
+                    accessibilityLabel="Gift preview image"
+                    testID="gift-preview-image"
+                  />
+                  <Muted>Tap to enlarge</Muted>
+                </Pressable>
               ) : (
-                <View style={[styles.hero, styles.heroEmpty]}>
-                  <Muted>No photo yet — you can still save the gift</Muted>
+                <View style={[styles.thumb, styles.thumbEmpty]}>
+                  <Muted>No photo yet</Muted>
                 </View>
               )}
 
@@ -221,6 +248,9 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
                 onChangeText={setTitle}
                 testID="gift-title-input"
               />
+              {title.trim() ? (
+                <Muted>List will show · {shortProductTitle(title) || title.trim()}</Muted>
+              ) : null}
               <Muted>Save to · {listTitle}</Muted>
               <Field
                 label="Price (optional)"
@@ -230,6 +260,23 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
                 placeholder="0.00"
                 testID="gift-price-input"
               />
+              <Text style={styles.priorityLabel}>Priority</Text>
+              <View style={styles.priorityRow} testID="gift-priority-picker">
+                {GIFT_PRIORITIES.map((opt) => {
+                  const on = priority === opt.value;
+                  return (
+                    <Pressable
+                      key={opt.value}
+                      onPress={() => setPriority(opt.value)}
+                      testID={`gift-priority-${opt.label.toLowerCase()}`}
+                      style={[styles.priorityChip, on && styles.priorityChipOn]}>
+                      <Text style={[styles.priorityChipText, on && styles.priorityChipTextOn]}>
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               <Field
                 label="Link (optional)"
                 value={url}
@@ -248,16 +295,38 @@ export function AddGiftSheet({ visible, listTitle, onClose, onSave }: Props) {
               />
               {error ? <Text style={styles.error}>{error}</Text> : null}
               <Button
-                label="Add to list"
+                label={editing ? 'Save changes' : 'Add to list'}
                 onPress={save}
                 loading={saving}
-                testID="add-gift-button"
+                testID={editing ? 'save-gift-button' : 'add-gift-button'}
               />
               <Button label="Cancel" variant="ghost" onPress={onClose} />
             </ScrollView>
           ) : null}
         </View>
       </View>
+
+      <Modal
+        visible={photoOpen && Boolean(imageUrl)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPhotoOpen(false)}>
+        <Pressable
+          style={styles.lightbox}
+          onPress={() => setPhotoOpen(false)}
+          accessibilityLabel="Close photo"
+          testID="gift-photo-lightbox">
+          {imageUrl ? (
+            <Image
+              source={{ uri: imageUrl }}
+              style={styles.lightboxImage}
+              resizeMode="contain"
+              testID="gift-preview-full"
+            />
+          ) : null}
+          <Text style={styles.lightboxHint}>Tap anywhere to close</Text>
+        </Pressable>
+      </Modal>
     </Modal>
   );
 }
@@ -300,16 +369,36 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   error: { color: theme.colors.danger, fontFamily: 'DMSans_500Medium', fontSize: 13 },
-  hero: {
-    width: '100%',
-    height: 200,
-    borderRadius: theme.radius.lg,
+  thumbRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  thumb: {
+    width: 88,
+    height: 88,
+    borderRadius: 14,
     backgroundColor: theme.colors.pinkSoft,
+    borderWidth: 1,
+    borderColor: theme.colors.line,
   },
-  heroEmpty: {
+  thumbEmpty: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    padding: 8,
+  },
+  lightbox: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  lightboxImage: {
+    width: '100%',
+    height: '75%',
+  },
+  lightboxHint: {
+    marginTop: 16,
+    color: '#fff',
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 13,
   },
   skeletonCard: {
     flexDirection: 'row',
@@ -331,4 +420,35 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.pinkSoft,
   },
   row: { flexDirection: 'row', gap: 10 },
+  priorityLabel: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 13,
+    color: theme.colors.ink,
+  },
+  priorityRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  priorityChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.line,
+    backgroundColor: theme.colors.white,
+  },
+  priorityChipOn: {
+    borderColor: theme.colors.pink,
+    backgroundColor: theme.colors.pinkSoft,
+  },
+  priorityChipText: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 13,
+    color: theme.colors.muted,
+  },
+  priorityChipTextOn: {
+    fontFamily: 'DMSans_700Bold',
+    color: theme.colors.pink,
+  },
 });

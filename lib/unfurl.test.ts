@@ -58,4 +58,27 @@ describe('parseUnfurlHtml', () => {
     `;
     expect(parseUnfurlHtml(html, 'https://shop.example/m').price).toBe(24.5);
   });
+
+  it('reads Amazon a-offscreen price when OG omits it', () => {
+    const html = `
+      <html><body>
+        <span class="a-price"><span class="a-offscreen">$42.99</span></span>
+      </body></html>
+    `;
+    expect(parseUnfurlHtml(html, 'https://www.amazon.com/dp/B00').price).toBe(42.99);
+  });
+
+  it('reads Walmart currentPrice JSON', () => {
+    const html = `
+      <html><body>
+        <script>window.__WML={"currentPrice":{"price":17.84,"currency":"USD"}}</script>
+      </body></html>
+    `;
+    expect(parseUnfurlHtml(html, 'https://www.walmart.com/ip/1').price).toBe(17.84);
+  });
+
+  it('reads itemprop price content', () => {
+    const html = `<span itemprop="price" content="9.50"></span>`;
+    expect(parseUnfurlHtml(html, 'https://shop.example/x').price).toBe(9.5);
+  });
 });

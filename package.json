@@ -5,7 +5,9 @@
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
     "@expo-google-fonts/fraunces": "^0.4.1",
+    "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "^8.6.0",
     "@supabase/supabase-js": "^2.112.3",
     "expo": "~57.0.15",
     "expo-auth-session": "^57.0.8",
@@ -53,7 +55,10 @@
     "db:start": "supabase start",
     "db:status": "supabase status",
     "db:reset": "supabase db reset",
+    "backend:unfurl": "node scripts/backend-unfurl.mjs",
     "unfurl:browser": "node scripts/unfurl-browser.mjs",
+    "unfurl:setup": "playwright install chromium",
+    "dev": "npx supabase start && npm run backend:unfurl",
     "devices": "expo start"
   },
   "private": true

@@ -1,4 +1,4 @@
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 
@@ -6,8 +6,16 @@ import { Brand, Button, Field, Muted, Screen, Title } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
+function safeNextPath(raw: string | string[] | undefined): string | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return null;
+  return value;
+}
+
 export default function AuthScreen() {
   const { session, loading } = useAuth();
+  const { next } = useLocalSearchParams<{ next?: string }>();
+  const nextPath = safeNextPath(next);
   const router = useRouter();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
@@ -16,8 +24,12 @@ export default function AuthScreen() {
   const [busy, setBusy] = useState(false);
 
   if (!loading && session) {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href={(nextPath ?? '/(tabs)') as '/(tabs)'} />;
   }
+
+  const afterAuth = () => {
+    router.replace((nextPath ?? '/(tabs)') as '/(tabs)');
+  };
 
   const submit = async () => {
     setBusy(true);
@@ -46,7 +58,7 @@ export default function AuthScreen() {
           'Local Supabase usually auto-confirms email. You can sign in now.',
         );
       }
-      router.replace('/(tabs)');
+      afterAuth();
     } catch (e) {
       Alert.alert('Auth error', e instanceof Error ? e.message : 'Something went wrong');
     } finally {
@@ -62,7 +74,11 @@ export default function AuthScreen() {
         <Brand />
         <View style={{ gap: 4, marginTop: 18 }}>
           <Title>{mode === 'signin' ? 'Welcome back' : 'Create account'}</Title>
-          <Muted>Wishlists for friends, groups, and every occasion.</Muted>
+          <Muted>
+            {nextPath
+              ? 'Sign in to finish accepting your invite.'
+              : 'Wishlists for friends, groups, and every occasion.'}
+          </Muted>
         </View>
         <View style={{ gap: 12, marginTop: 24 }}>
           {mode === 'signup' ? (

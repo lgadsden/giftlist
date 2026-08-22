@@ -6,6 +6,7 @@ import { useFocusEffect } from 'expo-router';
 import { Card, Muted, Screen, Title } from '@/components/ui';
 import { theme } from '@/constants/Colors';
 import { eventTypeLabel, type EventType } from '@/lib/domain';
+import { formatWishlistDate } from '@/lib/eventCovers';
 import { supabase } from '@/lib/supabase';
 
 type WishlistRow = {
@@ -67,7 +68,9 @@ export default function ListsScreen() {
             <Card style={styles.row}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.title}>{item.title}</Text>
-                <Muted>{`${eventTypeLabel(item.event_type)}${item.event_date ? ` · ${item.event_date}` : ''}`}</Muted>
+                <Muted>{`${eventTypeLabel(item.event_type)}${
+                  item.event_date ? ` · ${formatWishlistDate(item.event_date)}` : ''
+                }`}</Muted>
               </View>
               <Text style={styles.chevron}>›</Text>
             </Card>

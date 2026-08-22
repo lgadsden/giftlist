@@ -15,6 +15,7 @@ import { useFocusEffect } from 'expo-router';
 import { Button, Card, Field, Muted, Screen, Title } from '@/components/ui';
 import { theme } from '@/constants/Colors';
 import { useAuth } from '@/lib/auth';
+import { orderedPair } from '@/lib/friends';
 import { supabase } from '@/lib/supabase';
 
 type ProfileHit = {
@@ -36,11 +37,7 @@ type GroupRow = {
   name: string;
 };
 
-type GroupMember = ProfileHit & { role: string; membership_id: string };
-
-function orderedPair(a: string, b: string): [string, string] {
-  return a < b ? [a, b] : [b, a];
-}
+type GroupMember = ProfileHit & { role: string };
 
 export default function FriendsScreen() {
   const { user } = useAuth();
@@ -58,9 +55,9 @@ export default function FriendsScreen() {
   const loadGroupMembers = useCallback(async (groupId: string) => {
     const { data: rows } = await supabase
       .from('group_members')
-      .select('id, role, user_id')
+      .select('role, user_id')
       .eq('group_id', groupId);
-    const memberRows = (rows as { id: string; role: string; user_id: string }[]) ?? [];
+    const memberRows = (rows as { role: string; user_id: string }[]) ?? [];
     if (!memberRows.length) {
       setGroupMembers((prev) => ({ ...prev, [groupId]: [] }));
       return;
@@ -79,7 +76,7 @@ export default function FriendsScreen() {
         .map((r) => {
           const p = byId[r.user_id];
           if (!p) return null;
-          return { ...p, role: r.role, membership_id: r.id };
+          return { ...p, role: r.role };
         })
         .filter(Boolean) as GroupMember[],
     }));
@@ -231,8 +228,12 @@ export default function FriendsScreen() {
     await load();
   };
 
-  const removeFromGroup = async (groupId: string, membershipId: string) => {
-    const { error } = await supabase.from('group_members').delete().eq('id', membershipId);
+  const removeFromGroup = async (groupId: string, memberUserId: string) => {
+    const { error } = await supabase
+      .from('group_members')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('user_id', memberUserId);
     if (error) Alert.alert('Could not remove member', error.message);
     await loadGroupMembers(groupId);
     await load();
@@ -246,7 +247,11 @@ export default function FriendsScreen() {
           <Text style={styles.link}>Copy invite link</Text>
         </Pressable>
       </View>
-      {inviteUrl ? <Muted>{inviteUrl}</Muted> : null}
+      {inviteUrl ? (
+        <Text style={styles.inviteUrl} testID="invite-url" selectable>
+          {inviteUrl}
+        </Text>
+      ) : null}
 
       <TextInput
         value={query}
@@ -338,7 +343,7 @@ export default function FriendsScreen() {
                   {expanded ? (
                     <View style={{ gap: 8 }} testID={`group-members-${g.name}`}>
                       {members.map((m) => (
-                        <View key={m.membership_id} style={styles.row}>
+                        <View key={m.id} style={styles.row}>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.name}>{m.display_name}</Text>
                             <Muted>
@@ -348,7 +353,7 @@ export default function FriendsScreen() {
                           {m.id !== user?.id ? (
                             <Pressable
                               testID={`remove-member-${g.name}-${m.username}`}
-                              onPress={() => removeFromGroup(g.id, m.membership_id)}>
+                              onPress={() => removeFromGroup(g.id, m.id)}>
                               <Text style={styles.remove}>Remove</Text>
                             </Pressable>
                           ) : null}
@@ -410,6 +415,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   link: { color: theme.colors.pink, fontFamily: 'DMSans_700Bold', fontSize: 14 },
+  inviteUrl: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    color: theme.colors.muted,
+    marginBottom: 4,
+  },
   search: {
     backgroundColor: theme.colors.white,
     borderWidth: 1,

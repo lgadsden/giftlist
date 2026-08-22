@@ -19,7 +19,8 @@ function looksIncomplete(meta: {
   imageUrl: string | null;
   price: number | null;
 }): boolean {
-  return !meta.title || (!meta.imageUrl && meta.price == null);
+  // Title+image without price is still incomplete for shopping links.
+  return !meta.title || meta.price == null;
 }
 
 function metaContent(html: string, keys: string[]): string | null {
@@ -103,8 +104,51 @@ function parseUnfurlHtml(html: string, pageUrl: string) {
   const price =
     priceFromJsonLd(html) ??
     parsePriceValue(metaContent(html, ['product:price:amount', 'og:price:amount'])) ??
+    priceFromHtmlFallbacks(html) ??
     null;
   return { title, imageUrl, description, price };
+}
+
+function priceFromHtmlFallbacks(html: string): number | null {
+  const patterns: RegExp[] = [
+    /class=["'][^"']*a-offscreen[^"']*["'][^>]*>\s*\$?\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /id=["']priceblock_(?:ourprice|dealprice|saleprice)["'][^>]*>\s*\$?\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /class=["'][^"']*a-price-whole[^"']*["'][^>]*>\s*([0-9,]+)/i,
+    /itemprop=["']price["'][^>]+content=["']([0-9]+(?:\.[0-9]{1,2})?)["']/i,
+    /content=["']([0-9]+(?:\.[0-9]{1,2})?)["'][^>]+itemprop=["']price["']/i,
+    /"priceAmount"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /"currentPrice"\s*:\s*\{\s*"price"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /"price"\s*:\s*\{\s*"rawString"\s*:\s*"\$?([0-9]+(?:\.[0-9]{1,2})?)"/i,
+    /"current_retail"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /data-seo-id=["']hero-price["'][^>]*>[\s\S]*?\$([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /"displayPrice"\s*:\s*"\$?([0-9]+(?:\.[0-9]{1,2})?)"/i,
+  ];
+  for (const re of patterns) {
+    const match = html.match(re);
+    if (match?.[1]) {
+      const n = Number.parseFloat(match[1]!.replace(/,/g, ''));
+      if (Number.isFinite(n) && n >= 0 && n < 1_000_000) {
+        // a-price-whole is dollars only — pair with fraction when present
+        if (/a-price-whole/i.test(re.source)) {
+          const frac = html.match(
+            /class=["'][^"']*a-price-fraction[^"']*["'][^>]*>\s*([0-9]{1,2})/i,
+          );
+          if (frac?.[1]) {
+            const withFrac = Number.parseFloat(`${Math.trunc(n)}.${frac[1]}`);
+            if (Number.isFinite(withFrac)) return withFrac;
+          }
+        }
+        return n;
+      }
+    }
+  }
+  return null;
+}
+
+function coercePrice(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
+  if (typeof value === 'string') return parsePriceValue(value);
+  return null;
 }
 
 async function fastFetch(url: string) {
@@ -152,7 +196,7 @@ async function browserFetch(url: string) {
         title: data.title ?? null,
         imageUrl: data.imageUrl ?? null,
         description: data.description ?? null,
-        price: typeof data.price === 'number' ? data.price : null,
+        price: coercePrice(data.price),
         mode: 'browser' as const,
         error: data.error,
       };
@@ -202,7 +246,13 @@ Deno.serve(async (req) => {
     if (shouldEscalate) {
       const browserMeta = await browserFetch(parsed.toString());
       if (browserMeta && (browserMeta.title || browserMeta.imageUrl || browserMeta.price != null)) {
-        meta = browserMeta;
+        meta = {
+          title: browserMeta.title ?? meta.title,
+          imageUrl: browserMeta.imageUrl ?? meta.imageUrl,
+          description: browserMeta.description ?? meta.description,
+          price: browserMeta.price ?? meta.price,
+          error: browserMeta.error ?? meta.error,
+        };
         mode = 'browser';
       } else if (wantsBrowser && !browserMeta) {
         meta = {
@@ -210,6 +260,11 @@ Deno.serve(async (req) => {
           error:
             meta.error ??
             'Retailer page needs the Playwright helper (npm run unfurl:browser). You can enter details manually.',
+        };
+      } else if (browserMeta?.error && meta.price == null) {
+        meta = {
+          ...meta,
+          error: browserMeta.error,
         };
       }
     }

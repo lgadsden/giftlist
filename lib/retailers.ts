@@ -37,5 +37,5 @@ export function unfurlLooksIncomplete(meta: {
   imageUrl: string | null;
   price: number | null;
 }): boolean {
-  return !meta.title || (!meta.imageUrl && meta.price == null);
+  return !meta.title || meta.price == null;
 }

@@ -25,6 +25,7 @@ Prerequisites: Docker (Supabase), Xcode Simulator (iOS), Android Studio emulator
 
 ```bash
 npx supabase start
+npm run backend:unfurl   # edge unfurl + Playwright sidecar (Amazon/Walmart/Target)
 npm start
 ```
 
@@ -41,24 +42,30 @@ npm run android
 npm run web
 ```
 
+**Product link scraping:** keep `npm run backend:unfurl` running while you develop. It starts:
+
+1. `supabase functions serve` (edge unfurl)
+2. Playwright helper on `:8787` for hard retailers
+
+First time (or after upgrading Playwright):
+
+```bash
+npm run unfurl:setup   # downloads Chromium for the scraper
+```
+
+Without the sidecar, OG/JSON-LD still works for many sites; Amazon / Walmart / Target need the browser helper for reliable prices.
+
 ## Verification
 
 ```bash
 npx supabase start          # local backend required for e2e
 npm run typecheck
-npm test                    # unit (domain + unfurl parser)
+npm test                    # unit (domain, friends, gifts, reservations, unfurl)
 npm run test:e2e            # Playwright UI flows against Expo web
 # or: npm run verify
 ```
 
-UI e2e covers: sign up, create wishlist, add gifts, URL image preview (unfurl), remove gift, friend request, create group, add/remove group members.
-
-**Product link scraping:** fast OG/JSON-LD first; Amazon / Walmart / Target escalate to a local Playwright helper:
-
-```bash
-npx supabase functions serve   # edge unfurl
-npm run unfurl:browser         # Playwright sidecar on :8787
-```
+UI e2e covers: sign up, create wishlist, add/edit gifts, URL image preview (unfurl), remove gift, friend request accept, invite-link claim, create group, claim/purchased gift states.
 
 **Android emulator storage:** if Expo Go install fails with `INSTALL_FAILED_INSUFFICIENT_STORAGE`, wipe the AVD once:
 
@@ -70,10 +77,9 @@ emulator -avd Medium_Phone_API_36.1 -wipe-data
 
 Physical devices: Expo Go + same Wi‑Fi; set `EXPO_PUBLIC_SUPABASE_URL` to your Mac’s LAN IP.
 
+## v1 features
 
-## v1 features in progress
-
-Auth, friends/groups, wishlists + list sharing, manual gifts, secret reservations, affiliate click logging.
+Auth, friends/groups + invite links, wishlists + sharing, gifts (URL scrape + edit), claim/reserve with purchased state, affiliate click logging.
 
 ## Notes
 

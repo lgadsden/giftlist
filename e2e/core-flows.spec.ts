@@ -1,43 +1,19 @@
 import { expect, test } from '@playwright/test';
 
-import { goTab, signUp, supabaseEnv, uniqueUser } from './helpers';
-
-async function createUserViaApi(user: ReturnType<typeof uniqueUser>) {
-  const { anon, api } = supabaseEnv();
-  const signup = await fetch(`${api}/auth/v1/signup`, {
-    method: 'POST',
-    headers: { apikey: anon, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: user.email,
-      password: user.password,
-      data: { display_name: user.displayName, username: user.username },
-    }),
-  }).then((r) => r.json());
-  const token = signup.access_token as string;
-  const id = signup.user?.id as string;
-  expect(token).toBeTruthy();
-  expect(id).toBeTruthy();
-
-  const profiles = await fetch(`${api}/rest/v1/profiles?id=eq.${id}&select=username,display_name`, {
-    headers: { apikey: anon, Authorization: `Bearer ${token}` },
-  }).then((r) => r.json());
-  return {
-    ...user,
-    id,
-    token,
-    username: profiles[0]?.username as string,
-    displayName: profiles[0]?.display_name as string,
-  };
-}
+import { goTab, signUp, uniqueUser } from './helpers';
 
 test.describe('UI verification — core flows', () => {
-  test('create user, wishlist, items, groups, unfurl preview, remove item', async ({ page }) => {
-    const { anon, api } = supabaseEnv();
+  test('create user, wishlist, items, groups, unfurl preview, remove item', async ({
+    browser,
+  }) => {
     const owner = uniqueUser('owner');
     const friendSeed = uniqueUser('friend');
-    const friend = await createUserViaApi(friendSeed);
+
+    const page = await browser.newPage();
+    const friendPage = await browser.newPage();
 
     await signUp(page, owner);
+    await signUp(friendPage, friendSeed);
 
     await page.route('**/functions/v1/unfurl', async (route) => {
       await route.fulfill({
@@ -72,51 +48,54 @@ test.describe('UI verification — core flows', () => {
     await page.getByTestId('gift-title-input').fill('Extra Candle');
     await page.getByTestId('add-gift-button').click();
     await expect(page.getByTestId('gift-title-Extra Candle')).toBeVisible();
-    await page.getByTestId('remove-gift-Extra Candle').click();
+    await page.getByTestId('gift-menu-Extra Candle').click();
+    page.once('dialog', (d) => d.accept());
+    await page.getByTestId('gift-menu-delete').click();
     await expect(page.getByTestId('gift-title-Extra Candle')).toHaveCount(0);
 
     await goTab(page, 'Friends');
     await page.getByTestId('friend-search').click();
-    await page.getByTestId('friend-search').pressSequentially(friend.username, { delay: 40 });
-    await expect(page.getByTestId(`add-friend-${friend.username}`)).toBeVisible({ timeout: 15_000 });
-    page.once('dialog', (d) => d.accept());
-    await page.getByTestId(`add-friend-${friend.username}`).click();
-
-    const pendingForFriend = await fetch(
-      `${api}/rest/v1/friendships?status=eq.pending&select=id,requester_id`,
-      { headers: { apikey: anon, Authorization: `Bearer ${friend.token}` } },
-    ).then((r) => r.json());
-
-    const toAccept = (pendingForFriend as { id: string; requester_id: string }[]).find(
-      (f) => f.requester_id !== friend.id,
-    );
-    expect(toAccept).toBeTruthy();
-    const acceptRes = await fetch(`${api}/rest/v1/friendships?id=eq.${toAccept!.id}`, {
-      method: 'PATCH',
-      headers: {
-        apikey: anon,
-        Authorization: `Bearer ${friend.token}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal',
-      },
-      body: JSON.stringify({ status: 'accepted' }),
+    await page.getByTestId('friend-search').pressSequentially(friendSeed.username, { delay: 40 });
+    await expect(page.getByTestId(`add-friend-${friendSeed.username}`)).toBeVisible({
+      timeout: 15_000,
     });
-    expect(acceptRes.ok).toBeTruthy();
+    page.once('dialog', (d) => d.accept());
+    await page.getByTestId(`add-friend-${friendSeed.username}`).click();
+
+    await goTab(friendPage, 'Friends');
+    await expect(friendPage.getByTestId(`accept-friend-${owner.username}`)).toBeVisible({
+      timeout: 20_000,
+    });
+    await friendPage.getByTestId(`accept-friend-${owner.username}`).click();
+    await expect(friendPage.getByTestId(`friend-row-${owner.username}`)).toBeVisible({
+      timeout: 15_000,
+    });
 
     await page.reload();
     await goTab(page, 'Friends');
-    await expect(page.getByTestId(`friend-row-${friend.username}`)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId(`friend-row-${friendSeed.username}`)).toBeVisible({
+      timeout: 20_000,
+    });
 
     await page.getByTestId('new-group-input').fill('Family');
     await page.getByTestId('create-group-button').click();
     await expect(page.getByTestId('group-card-Family')).toBeVisible({ timeout: 15_000 });
-    await page.getByTestId('group-toggle-Family').click();
-    await page.getByTestId(`add-member-Family-${friend.username}`).click();
-    await expect(page.getByTestId(`remove-member-Family-${friend.username}`)).toBeVisible();
-    await page.getByTestId(`remove-member-Family-${friend.username}`).click();
-    await expect(page.getByTestId(`remove-member-Family-${friend.username}`)).toHaveCount(0);
+    // createGroup auto-expands; only toggle if the members panel is hidden
+    if (!(await page.getByTestId('group-members-Family').isVisible().catch(() => false))) {
+      await page.getByTestId('group-toggle-Family').click();
+    }
+    await expect(page.getByTestId(`add-member-Family-${friendSeed.username}`)).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.getByTestId(`add-member-Family-${friendSeed.username}`).click();
+    await expect(page.getByTestId(`remove-member-Family-${friendSeed.username}`)).toBeVisible();
+    await page.getByTestId(`remove-member-Family-${friendSeed.username}`).click();
+    await expect(page.getByTestId(`remove-member-Family-${friendSeed.username}`)).toHaveCount(0);
 
     await goTab(page, 'Lists');
     await expect(page.getByTestId('wishlist-row-Birthday List')).toBeVisible();
+
+    await page.close();
+    await friendPage.close();
   });
 });

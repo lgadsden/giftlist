@@ -33,7 +33,14 @@ export default function TabLayout() {
           tabBarInactiveTintColor: theme.colors.muted,
           tabBarStyle: {
             backgroundColor: theme.colors.white,
-            borderTopColor: theme.colors.line,
+            borderTopColor: 'rgba(26,26,31,0.06)',
+            height: 64,
+            paddingTop: 6,
+            paddingBottom: 8,
+          },
+          tabBarLabelStyle: {
+            fontFamily: 'DMSans_700Bold',
+            fontSize: 11,
           },
         }}>
         <Tabs.Screen

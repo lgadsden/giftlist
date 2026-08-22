@@ -34,9 +34,15 @@ function absoluteUrl(raw: string, baseUrl: string): string | null {
   }
 }
 
-function parsePriceValue(raw: unknown): number | null {
+export function parsePriceValue(raw: unknown): number | null {
   if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) return raw;
   if (typeof raw !== 'string') return null;
+  // Prefer the first $amount when multiple numbers appear (e.g. "was $40 now $24.99")
+  const dollar = raw.match(/\$\s*([0-9]+(?:\.[0-9]{1,2})?)/);
+  if (dollar) {
+    const n = Number.parseFloat(dollar[1]!);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
   const cleaned = raw.replace(/[^0-9.]/g, '');
   if (!cleaned) return null;
   const n = Number.parseFloat(cleaned);
@@ -82,6 +88,45 @@ function priceFromJsonLd(html: string): number | null {
   return null;
 }
 
+/**
+ * Retailer HTML that hides price from OG/JSON-LD (Amazon offscreen spans,
+ * Walmart embedded JSON, generic itemprop).
+ */
+export function priceFromHtmlFallbacks(html: string): number | null {
+  const patterns: RegExp[] = [
+    /class=["'][^"']*a-offscreen[^"']*["'][^>]*>\s*\$?\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /id=["']priceblock_(?:ourprice|dealprice|saleprice)["'][^>]*>\s*\$?\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /class=["'][^"']*a-price-whole[^"']*["'][^>]*>\s*([0-9,]+)/i,
+    /itemprop=["']price["'][^>]+content=["']([0-9]+(?:\.[0-9]{1,2})?)["']/i,
+    /content=["']([0-9]+(?:\.[0-9]{1,2})?)["'][^>]+itemprop=["']price["']/i,
+    /"priceAmount"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /"currentPrice"\s*:\s*\{\s*"price"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /"price"\s*:\s*\{\s*"rawString"\s*:\s*"\$?([0-9]+(?:\.[0-9]{1,2})?)"/i,
+    /"current_retail"\s*:\s*([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /data-seo-id=["']hero-price["'][^>]*>[\s\S]*?\$([0-9]+(?:\.[0-9]{1,2})?)/i,
+    /"displayPrice"\s*:\s*"\$?([0-9]+(?:\.[0-9]{1,2})?)"/i,
+  ];
+  for (const re of patterns) {
+    const match = html.match(re);
+    if (match?.[1]) {
+      const n = Number.parseFloat(match[1]!.replace(/,/g, ''));
+      if (Number.isFinite(n) && n >= 0 && n < 1_000_000) {
+        if (/a-price-whole/i.test(re.source)) {
+          const frac = html.match(
+            /class=["'][^"']*a-price-fraction[^"']*["'][^>]*>\s*([0-9]{1,2})/i,
+          );
+          if (frac?.[1]) {
+            const withFrac = Number.parseFloat(`${Math.trunc(n)}.${frac[1]}`);
+            if (Number.isFinite(withFrac)) return withFrac;
+          }
+        }
+        return n;
+      }
+    }
+  }
+  return null;
+}
+
 export function parseUnfurlHtml(html: string, pageUrl: string): UnfurlResult {
   const title =
     metaContent(html, ['og:title', 'twitter:title']) ??
@@ -96,6 +141,7 @@ export function parseUnfurlHtml(html: string, pageUrl: string): UnfurlResult {
   const price =
     priceFromJsonLd(html) ??
     parsePriceValue(metaContent(html, ['product:price:amount', 'og:price:amount'])) ??
+    priceFromHtmlFallbacks(html) ??
     null;
 
   return { title, imageUrl, description, price };

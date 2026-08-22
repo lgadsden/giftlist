@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 
+import { DateField } from '@/components/DateField';
 import { Button, Field, Muted, Screen, Title } from '@/components/ui';
 import { theme } from '@/constants/Colors';
 import { useAuth } from '@/lib/auth';
@@ -141,19 +142,22 @@ export default function CreateWishlistScreen() {
           })}
         </View>
 
-        <Field
-          label="Date (optional, YYYY-MM-DD)"
+        <DateField
+          label="Date (optional)"
           value={eventDate}
-          onChangeText={setEventDate}
-          placeholder="2026-12-25"
-          autoCapitalize="none"
+          onChange={setEventDate}
+          testID="wishlist-date-input"
         />
 
         <Text style={styles.label}>Share with</Text>
         {friends.map((f) => {
           const on = friendIds.includes(f.id);
           return (
-            <Pressable key={f.id} onPress={() => toggle(f.id, friendIds, setFriendIds)} style={styles.shareRow}>
+            <Pressable
+              key={f.id}
+              onPress={() => toggle(f.id, friendIds, setFriendIds)}
+              style={styles.shareRow}
+              testID={`share-friend-${f.display_name}`}>
               <Text style={styles.check}>{on ? '☑' : '☐'}</Text>
               <Text style={styles.shareName}>{f.display_name}</Text>
             </Pressable>
