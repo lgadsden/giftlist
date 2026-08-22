@@ -79,7 +79,7 @@ Physical devices: Expo Go + same Wi‑Fi; set `EXPO_PUBLIC_SUPABASE_URL` to your
 
 ## v1 features
 
-Auth, friends/groups + invite links, wishlists + sharing, gifts (URL scrape + edit), claim/reserve with purchased state, affiliate click logging.
+Auth, friends/groups + invite links, wishlists + sharing, gifts (URL scrape + edit), claim/reserve with purchased state, Secret Santa events (invite, join, draw, giftee wishlist), affiliate click logging.
 
 ## Notes
 
