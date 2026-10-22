@@ -49,7 +49,9 @@ test.describe('UI verification — core flows', () => {
     await page.getByTestId('add-gift-button').click();
     await expect(page.getByTestId('gift-title-Extra Candle')).toBeVisible();
     await page.getByTestId('gift-menu-Extra Candle').click();
-    page.once('dialog', (d) => d.accept());
+    await page.evaluate(() => {
+      window.confirm = () => true;
+    });
     await page.getByTestId('gift-menu-delete').click();
     await expect(page.getByTestId('gift-title-Extra Candle')).toHaveCount(0);
 
@@ -59,7 +61,6 @@ test.describe('UI verification — core flows', () => {
     await expect(page.getByTestId(`add-friend-${friendSeed.username}`)).toBeVisible({
       timeout: 15_000,
     });
-    page.once('dialog', (d) => d.accept());
     await page.getByTestId(`add-friend-${friendSeed.username}`).click();
 
     await goTab(friendPage, 'Friends');

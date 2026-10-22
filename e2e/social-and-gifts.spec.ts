@@ -65,7 +65,6 @@ test.describe('Social, edit gift, claim', () => {
     await expect(ownerPage.getByTestId(`add-friend-${friendUser.username}`)).toBeVisible({
       timeout: 15_000,
     });
-    ownerPage.once('dialog', (d) => d.accept());
     await ownerPage.getByTestId(`add-friend-${friendUser.username}`).click();
 
     await goTab(friendPage, 'Friends');
@@ -84,8 +83,7 @@ test.describe('Social, edit gift, claim', () => {
       timeout: 20_000,
     });
 
-    // Invite link claim with a third user
-    ownerPage.once('dialog', (d) => d.accept());
+    // Invite link claim with a third user (Alert.alert is a no-op on web)
     await ownerPage.getByTestId('copy-invite-link').click();
     await expect(ownerPage.getByTestId('invite-url')).toBeVisible({ timeout: 10_000 });
     const inviteUrl = await ownerPage.getByTestId('invite-url').innerText();

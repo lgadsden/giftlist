@@ -10,6 +10,11 @@ import { theme } from '@/constants/Colors';
 import { useAuth } from '@/lib/auth';
 import type { EventType } from '@/lib/domain';
 import { coverDateBadge, firstGiftImage } from '@/lib/eventCovers';
+import {
+  giftingEventKindLabel,
+  giftingEventStatusLabel,
+  type GiftingEventStatus,
+} from '@/lib/events';
 import { supabase } from '@/lib/supabase';
 
 type WishlistRow = {
@@ -23,6 +28,13 @@ type WishlistRow = {
 
 type FriendListRow = WishlistRow & {
   ownerName: string;
+};
+
+type HomeEventRow = {
+  id: string;
+  title: string;
+  status: GiftingEventStatus;
+  event_date: string | null;
 };
 
 type ActivityRow = {
@@ -58,11 +70,12 @@ export default function HomeScreen() {
   const router = useRouter();
   const [lists, setLists] = useState<WishlistRow[]>([]);
   const [friendLists, setFriendLists] = useState<FriendListRow[]>([]);
+  const [events, setEvents] = useState<HomeEventRow[]>([]);
   const [activity, setActivity] = useState<ActivityRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [listsRes, notifRes] = await Promise.all([
+    const [listsRes, notifRes, eventsRes] = await Promise.all([
       supabase
         .from('wishlists')
         .select('id, title, event_type, event_date, owner_id, gifts(image_url)')
@@ -73,6 +86,11 @@ export default function HomeScreen() {
         .select('id, title, body, created_at')
         .order('created_at', { ascending: false })
         .limit(10),
+      supabase
+        .from('gifting_events')
+        .select('id, title, status, event_date')
+        .order('updated_at', { ascending: false })
+        .limit(8),
     ]);
 
     const rows =
@@ -126,6 +144,7 @@ export default function HomeScreen() {
 
     setLists(mine);
     setFriendLists(friendMapped);
+    setEvents((eventsRes.data as HomeEventRow[]) ?? []);
     setActivity((notifRes.data as ActivityRow[]) ?? []);
   }, [user?.id]);
 
@@ -212,6 +231,45 @@ export default function HomeScreen() {
               </Pressable>
             ))}
           </ScrollView>
+        )}
+
+        <View style={styles.sectionRow}>
+          <Text style={styles.section}>Events</Text>
+          <Pressable onPress={() => router.push('/event/create')} hitSlop={8} testID="home-create-event">
+            <Text style={styles.link}>New Secret Santa ›</Text>
+          </Pressable>
+        </View>
+        {events.length === 0 ? (
+          <View style={styles.activityWrap}>
+            <Card style={styles.activityEmpty}>
+              <Muted>Host a Secret Santa — invite friends, draw names, shop their lists.</Muted>
+              <View style={{ marginTop: 10 }}>
+                <Button label="Create Secret Santa" variant="soft" onPress={() => router.push('/event/create')} />
+              </View>
+            </Card>
+          </View>
+        ) : (
+          <View style={styles.activityWrap}>
+            {events.map((ev) => (
+              <Pressable
+                key={ev.id}
+                onPress={() => router.push(`/event/${ev.id}`)}
+                testID={`home-event-${ev.title}`}>
+                <Card style={styles.activityCard}>
+                  <View style={[styles.avatar, { backgroundColor: theme.colors.pinkSoft }]}>
+                    <MaterialCommunityIcons name="gift" size={20} color={theme.colors.pink} />
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.activityTitle}>{ev.title}</Text>
+                    <Text style={styles.activityBody}>
+                      {giftingEventKindLabel('secret_santa')} · {giftingEventStatusLabel(ev.status)}
+                      {ev.event_date ? ` · ${coverDateBadge(ev.event_date) ?? ''}` : ''}
+                    </Text>
+                  </View>
+                </Card>
+              </Pressable>
+            ))}
+          </View>
         )}
 
         {friendLists.length > 0 ? (

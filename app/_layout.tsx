@@ -86,6 +86,11 @@ export default function RootLayout() {
                 options={{ headerShown: true, title: 'Wishlists', headerBackTitle: 'Back' }}
               />
               <Stack.Screen name="wishlist/create" options={{ presentation: 'modal', headerShown: false }} />
+              <Stack.Screen name="event/create" options={{ presentation: 'modal', headerShown: false }} />
+              <Stack.Screen
+                name="event/[id]"
+                options={{ headerShown: true, title: 'Event', headerBackTitle: 'Back' }}
+              />
               <Stack.Screen name="invite/[token]" options={{ headerShown: false }} />
             </Stack>
           </AuthGate>
