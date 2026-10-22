@@ -35,9 +35,10 @@ export function ActionSheet({ visible, title, onClose, items }: Props) {
               <Pressable
                 testID={item.testID}
                 onPress={() => {
+                  // Run action first so sync prompts (window.confirm) work under Playwright.
+                  const run = item.onPress;
                   onClose();
-                  // Let the sheet close before running the action
-                  requestAnimationFrame(() => item.onPress());
+                  run();
                 }}
                 style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
                 <View

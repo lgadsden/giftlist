@@ -41,7 +41,8 @@ export async function signUp(page: Page, user: ReturnType<typeof uniqueUser>) {
   await page.getByTestId('auth-display-name').fill(user.displayName);
   await page.getByTestId('auth-email').fill(user.email);
   await page.getByTestId('auth-password').fill(user.password);
-  page.once('dialog', (d) => d.accept());
+  // RN Web Alert.alert is a no-op — do not leave a dangling dialog listener
+  // (it races later window.confirm handlers, e.g. gift delete).
   await page.getByTestId('auth-submit').click();
   await expect(page.getByTestId('create-wishlist-fab').or(page.getByText('Giftlist').first())).toBeVisible({
     timeout: 30_000,
